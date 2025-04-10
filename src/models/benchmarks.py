@@ -1,8 +1,10 @@
 import numpy as np
+import time
 
 # Black-Scholes
 from scipy.stats import norm
 def blackScholes(S0, K, r, sigma, T, opttype='P'):
+    start = time.time()
     d1 = (np.log(S0/K) + (r + sigma**2/2)*T) / (sigma * np.sqrt(T))
     d2 = d1 - sigma*np.sqrt(T)
     
@@ -16,11 +18,13 @@ def blackScholes(S0, K, r, sigma, T, opttype='P'):
         # price = np.exp(-r*T)*K*norm.cdf(-d2) - S0*norm.cdf(-d1) 
         price = put_price
 
-    print(f'Black-Scholes price: {price}')
+    elapse = (time.time() - start) * 1e3
+    print(f'Black-Scholes price: {price} - {elapse} ms')
     return price
 
 # European stype via binomial tree
 def binomialEuroOption(S0, K, r, sigma, nPeriod, T, opttype='P'):
+    start = time.time()
     # precompute values
     dt = T / nPeriod                          # delta_t
 
@@ -52,12 +56,14 @@ def binomialEuroOption(S0, K, r, sigma, nPeriod, T, opttype='P'):
         # else:
         #     C = np.maximum(C, S - K)
 
-    print(f'Binomial European price: {C[0]}')
+    elapse = (time.time() - start) * 1e3
+    print(f'Binomial European price: {C[0]} - {elapse} ms')
     return C[0]
 
 
 # American stype via binomial tree
 def binomialAmericanOption(S0, K, r, sigma, nPeriod, T, opttype='P'):
+    start = time.time()
     # precompute values
     dt = T / nPeriod                          # delta_t
 
@@ -89,5 +95,6 @@ def binomialAmericanOption(S0, K, r, sigma, nPeriod, T, opttype='P'):
         else:
             C = np.maximum(C, S - K)
             
-    print(f'Binomial American price: {C[0]}')
+    elapse = (time.time() - start) * 1e3
+    print(f'Binomial American price: {C[0]} - {elapse} ms')
     return C[0]
