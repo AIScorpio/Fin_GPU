@@ -4,6 +4,8 @@ import pyopencl as cl
 from .mc import MonteCarloBase
 from .utils import openCLEnv
 
+import time
+
 def checkError(a, b):
     err = a - b
     err_norm = la.norm(err)
@@ -168,6 +170,7 @@ class LSMC_Numpy(LongStaffBase):
 
     # lease-square to calc continuation value as approaximation of "actual discounted cashflow" 
     def longstaff_schwartz_itm_path_fast(self):
+        start = time.time()
         # setup computing components
         dt = self.mc.T / self.mc.nPeriod
         df = np.exp(- self.mc.r * dt)
@@ -228,17 +231,19 @@ class LSMC_Numpy(LongStaffBase):
         # discount cashflow to time zero for option pricing
         C_hat = np.sum(dc_cashflow) * df / self.mc.nPath
 
-        print(f'Longstaff numpy price: {C_hat}')
+        elapse = (time.time() - start) * 1e3
+        print(f'Longstaff numpy price: {C_hat} - {elapse} ms')
         return C_hat, np.array(coef_t), np.array(dc_cashflow_t)
 
 class LSMC_OpenCL(LongStaffBase):
-    def __init__(self, mc: MonteCarloBase, inverseType='GJ', toggleCV='OFF', log=None):
+    def __init__(self, mc: MonteCarloBase, preCalc=None, inverseType='GJ', toggleCV='OFF', log=None):
         """
             inverseType : str, optional ["CA", "GJ"]
                     The GPU matrix inversion method. Default value is 'GJ' using Gauss-Jordan Elimination. Can be set to
                     'CA' for Classic Adjoint
         """
         super().__init__(mc)
+        self.preCalc = preCalc
         self.inverseType = inverseType
         self.toggleCV = toggleCV
         self.log = log
@@ -289,7 +294,56 @@ class LSMC_OpenCL(LongStaffBase):
 
         return Xdagger_big , X_big_T
 
+    def __preCalc_gpu_optimized(self):
+        inverseType_gpu = ["CA", "GJ"]
+        if self.inverseType not in inverseType_gpu:
+            raise Exception(f'Wrong value for inverseType, can ONLY be one of {inverseType_gpu}')
+        
+        # Use pinned memory for faster transfers
+        St_host = np.ascontiguousarray(self.mc.St.flatten(), dtype=np.float32)
+        X_big_T = np.zeros((self.stride * self.mc.nPeriod, self.mc.nPath), dtype=np.float32)
+        Xdagger_big = np.zeros_like(X_big_T)
+
+        # Create buffers with optimal flags
+        St_dev = cl.Buffer(openCLEnv.context, cl.mem_flags.READ_ONLY | cl.mem_flags.COPY_HOST_PTR, hostbuf=St_host)
+        X_big_T_dev = cl.Buffer(openCLEnv.context, cl.mem_flags.READ_WRITE, size=X_big_T.nbytes)
+        Xdagger_big_dev = cl.Buffer(openCLEnv.context, cl.mem_flags.WRITE_ONLY, size=Xdagger_big.nbytes)
+
+        # Build kernel with optimization flags
+        kernel_src = open(f"./models/kernels/knl_src_pre_calc_optimized.c").read()
+        build_options = ["-cl-fast-relaxed-math", "-cl-mad-enable", f"-Dn_PATH={self.mc.nPath}", f"-Dn_PERIOD={self.mc.nPeriod}"]
+        # prog = cl.Program(openCLEnv.context, kernel_src %(self.mc.nPath, self.mc.nPeriod)).build(options=build_options)
+        prog = cl.Program(openCLEnv.context, kernel_src ).build(options=build_options)
+        
+        knl_preCalcAll = cl.Kernel(prog, 'preCalcAll_Optimized')
+        knl_preCalcAll.set_args(St_dev, np.float32(self.mc.K), np.int8(self.mc.opt), 
+                                # np.int32(self.mc.nPath), np.int32(self.mc.nPeriod),
+                                X_big_T_dev, Xdagger_big_dev)
+
+        # Execute with optimal workgroup size
+        max_wg_size = openCLEnv.device.max_work_group_size
+        wg_size = min(256, max_wg_size)  # Optimal for matrix operations
+        global_size = (self.mc.nPeriod,)
+        local_size = (wg_size,) if wg_size <= self.mc.nPeriod else None
+        # local_size = None
+        # print(local_size)
+
+        # Execute kernel with profiling
+        evt = cl.enqueue_nd_range_kernel(openCLEnv.queue, knl_preCalcAll, global_size, local_size)
+        
+        # Overlap copy with computation
+        copy_evt1 = cl.enqueue_copy(openCLEnv.queue, X_big_T, X_big_T_dev, wait_for=[evt])
+        copy_evt2 = cl.enqueue_copy(openCLEnv.queue, Xdagger_big, Xdagger_big_dev, wait_for=[evt])
+        copy_evt2.wait()
+
+        # Release resources
+        for buf in [St_dev, X_big_T_dev, Xdagger_big_dev]:
+            buf.release()
+
+        return Xdagger_big, X_big_T
+
     def longstaff_schwartz_itm_path_fast_hybrid(self):
+        start = time.time()
         # track discounted cashflow per time step
         dc_cashflow_t = []
         coef_t = []
@@ -306,7 +360,10 @@ class LSMC_OpenCL(LongStaffBase):
         dc_cashflow = payoffs[:, -1]
         
         # Pre-calc
-        Xdagger_big, X_big_T = self.__preCalc_gpu()
+        if self.preCalc == None:
+            Xdagger_big, X_big_T = self.__preCalc_gpu()
+        elif self.preCalc == 'optimized':
+            Xdagger_big, X_big_T = self.__preCalc_gpu_optimized()
         
         for t in range(self.mc.nPeriod-2, -1, -1):
             if (self.log=='INFO'):
@@ -358,7 +415,8 @@ class LSMC_OpenCL(LongStaffBase):
         # discount cashflow to time zero for option pricing
         C_hat = np.sum(dc_cashflow) * df / self.mc.nPath
 
-        print(f'Longstaff {openCLEnv.deviceName} price: {C_hat}')
+        elapse = (time.time() - start) * 1e3
+        print(f'Longstaff {openCLEnv.deviceName} price: {C_hat} - {elapse} ms')
         return C_hat, np.array(coef_t), np.array(dc_cashflow_t)
 
 
