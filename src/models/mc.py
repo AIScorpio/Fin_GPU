@@ -1,6 +1,9 @@
 import numpy as np
 import pyopencl as cl
 from .utils import openCLEnv
+import time
+
+import warnings
 
 # Black-Scholes
 from scipy.stats import norm
@@ -115,25 +118,32 @@ class hybridMonteCarlo(MonteCarloBase):
         self.nFish = nFish
         
         # prepare kernel, buffer
-        prog = cl.Program(openCLEnv.context, open("./models/kernels/knl_source_pso_computeCosts.c").read()%(nPath, nPeriod)).build()
-        self.knl_getEuroOption = cl.Kernel(prog, 'getEuroOption')
-        self.knl_psoAmerOption_gb = cl.Kernel(prog, 'psoAmerOption_gb')
+        try:
+            prog_AmerOpt = cl.Program(openCLEnv.context, open("./models/kernels/knl_source_mc_getAmerOption.c").read()%(nPath, nPeriod)).build()
+        except cl.BuildProgramFailure as e:
+            print("OpenCL Compilation Error:\n", e.program.get_build_info(openCLEnv.device, cl.program_build_info.LOG))
+            raise
+        self.knl_psoAmerOption_gb = cl.Kernel(prog_AmerOpt, 'psoAmerOption_gb')
         
         # init buffer for Z and St for Pso 
         self.Z_d = cl.Buffer(openCLEnv.context, cl.mem_flags.READ_ONLY | cl.mem_flags.COPY_HOST_PTR, hostbuf=self.Z)
         self.St_d = cl.Buffer(openCLEnv.context, cl.mem_flags.READ_ONLY | cl.mem_flags.COPY_HOST_PTR, hostbuf=self.St)
+
+        # ## transpose St for float4 vectorization
+        # St_transposed = np.ascontiguousarray(self.St.T)
+        # self.St_d = cl.Buffer(openCLEnv.context, cl.mem_flags.READ_ONLY | cl.mem_flags.COPY_HOST_PTR, hostbuf=St_transposed)
         
         # array and memory objects for Pso fitFunction costPsoAmerOption_cl()
-        # init boundary index to maturity and exercise to last period St, as track early exercise backwards in time (set in kernel code)
-        self.boundary_idx = np.zeros(shape=(self.nPath, self.nFish), dtype=np.int32) #+ nPeriod
-        self.exercise = np.zeros(shape=(self.nPath, self.nFish), dtype=np.float32) #+ self.St[:, -1].reshape(nPath, 1)
+        # init boundary index to maturity and exercise to last period St, as track early exercise backwards in time 
+        self.boundary_idx = np.empty(shape=(self.nPath, self.nFish), dtype=np.int32) #+ nPeriod
+        self.exercise = np.empty(shape=(self.nPath, self.nFish), dtype=np.float32) #+ self.St[:, -1].reshape(nPath, 1)
         self.boundary_idx_d = cl.Buffer(openCLEnv.context, cl.mem_flags.READ_WRITE | cl.mem_flags.COPY_HOST_PTR, hostbuf=self.boundary_idx)
         self.exercise_d = cl.Buffer(openCLEnv.context, cl.mem_flags.READ_WRITE | cl.mem_flags.COPY_HOST_PTR, hostbuf=self.exercise)
 
         # # Initialize shared arrays for Pso child classes
         nDim = self.nPeriod
-        self.pos_init = np.random.uniform(size=(nDim, nFish)).astype(np.float32) * self.S0
-        self.vel_init = np.random.uniform(size=(nDim, nFish)).astype(np.float32) * 5.0
+        self.pos_init = np.random.uniform(size=(nDim, nFish)).astype(np.float32) * 100.0    #self.S0
+        self.vel_init = np.random.uniform(size=(nDim, nFish)).astype(np.float32) * 5.0      #np.abs(self.S0 - self.K)
         self.r1 = np.random.uniform(size=(nDim, nFish)).astype(np.float32)
         self.r2 = np.random.uniform(size=(nDim, nFish)).astype(np.float32)
 
@@ -142,33 +152,142 @@ class hybridMonteCarlo(MonteCarloBase):
     
     # Monte Carlo European option - CPU
     def getEuroOption_np(self):
+        start = time.time()  
         assert (self.St.shape[0] == (np.exp(-self.r*self.T) * np.maximum(0, (self.K - self.St[:, -1]) * self.opt) ).shape[0])
         C_hat_Euro = (np.exp(-self.r*self.T) * np.maximum(0, (self.K - self.St[:, -1]) * self.opt) ).sum() / self.nPath
     
-        print(f"MonteCarlo Numpy European price: {C_hat_Euro}")
+        elapse = (time.time() - start) * 1e3
+        print(f"MonteCarlo Numpy European price: {C_hat_Euro} - {elapse} ms")
         return C_hat_Euro
 
     # Monte Carlo European option - GPU
-    def getEuroOption_cl(self):            
+    def getEuroOption_cl(self):        
+        warnings.warn(
+            "getEuroOption_cl is NOT performing, and will be removed in future versions, use `getEuroOption_cl_optimize` instead.",
+            DeprecationWarning,
+            stacklevel=2
+        )
+        start = time.time()    
+        prog_EuroOpt = cl.Program(openCLEnv.context, open("./models/kernels/knl_source_mc_getEuroOption.c").read()%(self.nPath, self.nPeriod)).build()
+        knl_getEuroOption = cl.Kernel(prog_EuroOpt, 'getEuroOption')
+
         # prepare result array, length of nPath for kernel threads
-        results = np.empty(self.nPath, dtype=np.float32)  # length of npath
-        results_d = cl.Buffer(openCLEnv.context, cl.mem_flags.WRITE_ONLY, size=results.nbytes)
+        payoffs = np.empty(self.nPath, dtype=np.float32)  # length of npath
+        payoffs_d = cl.Buffer(openCLEnv.context, cl.mem_flags.WRITE_ONLY, size=payoffs.nbytes)
             
-        self.knl_getEuroOption.set_args(self.Z_d, np.float32(self.S0), np.float32(self.K), 
+        # current
+        knl_getEuroOption.set_args(self.Z_d, np.float32(self.S0), np.float32(self.K), 
                                   np.float32(self.r), np.float32(self.sigma), 
-                                  np.float32(self.T), np.int8(self.opt), results_d)
+                                  np.float32(self.T), np.int8(self.opt), payoffs_d)
         
         # run kernel
         global_size = (self.nPath, )
         local_size = None
-        evt = cl.enqueue_nd_range_kernel(openCLEnv.queue, self.knl_getEuroOption, global_size, local_size)
-        
-        cl.enqueue_copy(openCLEnv.queue, results, results_d, wait_for=[evt])
+        evt = cl.enqueue_nd_range_kernel(openCLEnv.queue, knl_getEuroOption, global_size, local_size)
+        cl.enqueue_copy(openCLEnv.queue, payoffs, payoffs_d, wait_for=[evt])
         openCLEnv.queue.finish()    # <------- sychrnozation
         
-        C_hat_Euro = results.sum() / self.nPath
+        C_hat_Euro = payoffs.sum() / self.nPath
         
-        print(f"MonteCarlo {openCLEnv.deviceName} European price: {C_hat_Euro}")
+        elapse = (time.time() - start) * 1e3
+        print(f"MonteCarlo {openCLEnv.deviceName} European price: {C_hat_Euro} - {elapse} ms")
+        return C_hat_Euro
+
+    def getEuroOption_cl_optimized(self):      
+        start = time.time()          
+        prog_EuroOpt = cl.Program(openCLEnv.context, open("./models/kernels/knl_source_mc_getEuroOption.c").read()%(self.nPath, self.nPeriod)).build()
+        knl_getEuroOption = cl.Kernel(prog_EuroOpt, 'getEuroOption_optimized')
+
+        # prepare result array, length of nPath for kernel threads
+        payoffs = np.empty(self.nPath, dtype=np.float32)  # length of npath
+        payoffs_d = cl.Buffer(openCLEnv.context, cl.mem_flags.WRITE_ONLY, size=payoffs.nbytes)
+ 
+        # optimized
+        # lnS0 = np.log(self.S0)
+        # exp_neg_rT = np.exp(- self.r * self.T)
+        knl_getEuroOption.set_args(self.Z_d, np.float32(np.log(self.S0)), np.float32(self.K), 
+                                  np.float32(self.r), np.float32(self.sigma), 
+                                  np.float32(self.T), np.int8(self.opt), np.float32(np.exp(- self.r * self.T)), payoffs_d)
+        
+        # run kernel
+        global_size = (self.nPath, )
+        local_size = None
+        evt = cl.enqueue_nd_range_kernel(openCLEnv.queue, knl_getEuroOption, global_size, local_size)
+        cl.enqueue_copy(openCLEnv.queue, payoffs, payoffs_d, wait_for=[evt])
+        openCLEnv.queue.finish()    # <------- sychrnozation
+        
+        C_hat_Euro = payoffs.sum() / self.nPath
+        
+        elapse = (time.time() - start) * 1e3
+        print(f"MonteCarlo {openCLEnv.deviceName} European price: {C_hat_Euro} - {elapse} ms")
+        return C_hat_Euro
+
+    def getEuroOption_cl_optimize_reductionSum(self):    
+        CEILING = 65536
+        if (self.nPath > CEILING):
+            warnings.warn(
+                f"getEuroOption_cl_optimize_reductionSum ONLY works no exceeding {CEILING} paths, use `getEuroOption_cl_optimize` instead.",
+                UserWarning,
+                stacklevel=2
+            )   
+        start = time.time()          
+        prog_EuroOpt = cl.Program(openCLEnv.context, open("./models/kernels/knl_source_mc_getEuroOption.c").read()%(self.nPath, self.nPeriod)).build()
+        knl_getEuroOption_sum1 = cl.Kernel(prog_EuroOpt, 'getEuroOption_optimized_sum1')
+        knl_getEuroOption_sum2 = cl.Kernel(prog_EuroOpt, 'getEuroOption_optimized_sum2')
+
+        # prepare result array, length of nPath for kernel threads
+        # Calculate padded path count (multiple of 4 for float4)
+        float32_bytes = np.dtype(np.float32).itemsize     # sizeof(float): 4 
+
+        # Get workgroup size for local memory
+        max_wg_size = openCLEnv.device.max_work_group_size
+        preferred_wg_size = 256  # Optimal for most GPUs
+        WORKGROUP_SIZE = min(preferred_wg_size, max_wg_size)
+
+        # Local memory for reduction
+        # local_mem = cl.LocalMemory(WORKGROUP_SIZE * float32_bytes)
+
+        ## First reduction
+        # optimized
+        # lnS0 = np.log(self.S0)
+        # exp_neg_rT = np.exp(- self.r * self.T)
+        global_size = (self.nPath, )
+        local_size = (min(global_size[0], WORKGROUP_SIZE), )
+        n_Groups = (global_size[0] + local_size[0] - 1) // local_size[0]
+        C_hats = np.empty(n_Groups, dtype=np.float32)
+        C_hats_d = cl.Buffer(openCLEnv.context, cl.mem_flags.WRITE_ONLY, size=C_hats.nbytes)     # sizeof(float): 4
+        # print(f'>> 1 reduction: {self.nPath} threads, {WORKGROUP_SIZE} per group, {n_Groups} groups')
+
+        knl_getEuroOption_sum1.set_args(self.Z_d, np.float32(np.log(self.S0)), np.float32(self.K), 
+                                  np.float32(self.r), np.float32(self.sigma), 
+                                  np.float32(self.T), np.int8(self.opt), np.float32(np.exp(- self.r * self.T)), 
+                                  cl.LocalMemory(WORKGROUP_SIZE * float32_bytes), C_hats_d)
+
+        # Second/Final reduction        
+        global_size2 = (n_Groups, )
+        local_size2 = (min(n_Groups, WORKGROUP_SIZE), )
+        # print(f'>> {global_size2[0] // local_size2[0]}, { (n_Groups + local_size2[0] - 1) // local_size2[0]}')
+
+        final_result = np.empty(1, dtype=np.float32)
+        # n_Groups2 = (global_size2[0] + local_size2[0] - 1) // local_size2[0]
+        # final_result = np.empty(n_Groups2, dtype=np.float32)         # if too many paths exceeding e.g. 256^2, there will be (global_size2[0] // local_size2[0]) partial sums
+        final_result_d = cl.Buffer(openCLEnv.context, cl.mem_flags.WRITE_ONLY, size=final_result.nbytes) 
+        # print(f'>> 2 reduction: {n_Groups} threads, {local_size2[0]} per group, {n_Groups2} groups')
+
+        knl_getEuroOption_sum2.set_args(np.int8(n_Groups), C_hats_d, cl.LocalMemory(local_size2[0] * float32_bytes), final_result_d)
+        
+        # run kernel
+        evt1 = cl.enqueue_nd_range_kernel(openCLEnv.queue, knl_getEuroOption_sum1, global_size, local_size)
+        # cl.enqueue_copy(openCLEnv.queue, C_hats, C_hats_d, wait_for=[evt1])    # if only first reduction
+        evt2 = cl.enqueue_nd_range_kernel(openCLEnv.queue, knl_getEuroOption_sum2, global_size2, local_size2, wait_for=[evt1])
+        cl.enqueue_copy(openCLEnv.queue, final_result, final_result_d, wait_for=[evt2])
+        openCLEnv.queue.finish()    # <------- sychrnozation
+        
+        # C_hat_Euro = C_hats.sum() / self.nPath      # if only first reduction
+        C_hat_Euro = final_result.sum() / self.nPath
+
+        elapse = (time.time() - start) * 1e3
+        print(f"MonteCarlo {openCLEnv.deviceName}-reductionSum European price: {C_hat_Euro} - {elapse} ms")
         return C_hat_Euro
 
     # Monte Carlo pso American option - CPU: take one particle each time and loop thru PSO
@@ -193,6 +312,7 @@ class hybridMonteCarlo(MonteCarloBase):
 
     # Monte Carlo pso American option - GPU: take the whole PSO and process once
     def costPsoAmerOption_cl(self, pso_buffer, costs_buffer):
+        
         self.knl_psoAmerOption_gb.set_args(self.St_d, pso_buffer, costs_buffer, 
                                            self.boundary_idx_d, self.exercise_d, 
                                            np.float32(self.r), np.float32(self.T), np.float32(self.K), np.int8(self.opt))
@@ -200,7 +320,7 @@ class hybridMonteCarlo(MonteCarloBase):
         # execute kernel
         global_size = (self.nFish, )
         local_size = None
-        evt = cl.enqueue_nd_range_kernel(openCLEnv.queue, self.knl_psoAmerOption_gb, global_size, local_size)
+        cl.enqueue_nd_range_kernel(openCLEnv.queue, self.knl_psoAmerOption_gb, global_size, local_size).wait()
         openCLEnv.queue.finish()    # <------- sychrnozation
 
         return 
