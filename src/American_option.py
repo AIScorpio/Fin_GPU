@@ -8,23 +8,23 @@ from models.utils import checkOpenCL
 if __name__ == "__main__":
     checkOpenCL()
 
-    S0, r, sigma, T, nPath, nPeriod, K, opttype, nFish = 100.0, 0.03, 0.3, 1.0, 20000, 200, 110.0, 'P', 500
-    # S0, r, sigma, T, nPath, nPeriod, K, opttype, nFish = 100.0, 0.03, 0.3, 1.0, 50000, 200, 110.0, 'P', 500
+    # S0, r, sigma, T, nPath, nPeriod, K, opttype, nFish = 100.0, 0.03, 0.3, 1.0, 20000, 200, 110.0, 'P', 1000
+    S0, r, sigma, T, nPath, nPeriod, K, opttype, nFish = 100.0, 0.03, 0.3, 1.0, 2**14, 2**8, 110.0, 'P', 2**10
     mc = hybridMonteCarlo(S0, r, sigma, T, nPath, nPeriod, K, opttype, nFish)
-    print(mc.St.shape)
+    print(f'{nPath} paths, {nPeriod} periods, {nFish} particles.\n')
 
     # benchmarks
     bm.blackScholes(S0, K, r, sigma, T, opttype)
     bm.binomialEuroOption(S0, K, r, sigma, nPeriod, T, opttype)
     mc.getEuroOption_np()
-    mc.getEuroOption_cl()
+    mc.getEuroOption_cl_optimized()
     bm.binomialAmericanOption(S0, K, r, sigma, nPeriod, T, opttype)
 
     # longstaff
     lsmc_np = LSMC_Numpy(mc)
     lsmc_np.longstaff_schwartz_itm_path_fast()
 
-    lsmc_cl = LSMC_OpenCL(mc)
+    lsmc_cl = LSMC_OpenCL(mc, preCalc="optimized", inverseType='CA')
     lsmc_cl.longstaff_schwartz_itm_path_fast_hybrid()
 
     # pso
