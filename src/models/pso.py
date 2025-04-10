@@ -4,6 +4,7 @@ from .mc import MonteCarloBase
 import matplotlib.pyplot as plt
 from .utils import openCLEnv
 
+import time 
 
 class PSOBase:
     # const
@@ -56,6 +57,7 @@ class PSO_Numpy(PSOBase):
         return 
 
     def solvePsoAmerOption_np(self):
+        start = time.time()
         # print('  Solver job started')
         for i in range(self.iterMax):         # loop of iterations
         # while True:
@@ -84,7 +86,9 @@ class PSO_Numpy(PSOBase):
                 break
         
         C_hat = self.gbest_cost
-        print(f'Pso numpy price: {C_hat}')
+
+        elapse = (time.time() - start) * 1e3
+        print(f'Pso numpy price: {C_hat} - {elapse} ms')
         return C_hat
 
 
@@ -142,6 +146,7 @@ class PSO_OpenCL(PSOBase):
         return 
 
     def solvePsoAmerOption_cl(self):
+        start = time.time()
         # print('  Solver job started')
         for i in range(self.iterMax):         # loop of iterations
         # while True:
@@ -178,7 +183,9 @@ class PSO_OpenCL(PSOBase):
                 break
         
         C_hat = self.gbest_cost
-        print(f'Pso {openCLEnv.deviceName} price: {C_hat}')
+
+        elapse = (time.time() - start) * 1e3
+        print(f'Pso {openCLEnv.deviceName} price: {C_hat} - {elapse} ms')
         return C_hat 
     
     def cleanUp(self):
