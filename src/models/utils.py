@@ -2,7 +2,6 @@ import pyopencl as cl
 
 class openCLEnv:
     # ready the PyOpenCL environment
-    assert(len(cl.get_platforms())>0)
     platform = cl.get_platforms()[0]
     device = platform.get_devices(cl.device_type.GPU)[0]
     # print('Initializing opencl context on', cl.device_type.to_string(self.device.type).rpartition(' ')[2])
@@ -35,8 +34,8 @@ def checkOpenCL():
         .format(device.max_compute_units))
         print(' Device - Global Memory: {0:.0f} GB'\
         .format(device.global_mem_size/ 2**30))
-        # print(' Device - Global cache: {0:.0f} KB'\
-        # .format(device.global_mem_cache_size/ 2**10))
+#         print(' Device - Global cache: {0:.0f} KB'\
+#         .format(device.global_mem_cache_size/ 2**10))
         print(' Device - Constant Memory: {0:.0f} GB'\
         .format(device.max_constant_buffer_size/ 2**30))
         print(' Device - Local Memory: {0:.0f} KB'\
