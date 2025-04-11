@@ -9,7 +9,7 @@
 */
 __kernel void psoAmerOption_gb(
     __global const float *St, 
-    __global const float *pso, 
+    __global const float *pso,        // the updated postiion matrix, [nDim by nFish]
     __global float *C_hat, 
     __global int *boundary_idx, 
     __global float *exercise,
