@@ -164,7 +164,7 @@ class PSO_OpenCL(PSOBase):
             mask = np.greater(self.costs, self.pbest_costs)    # numpy vectorized comparison
             self.pbest_costs[mask] = self.costs[mask]
             self.pbest_pos[:,mask] = self.position[:,mask]
-            cl.enqueue_copy(openCLEnv.queue, self.pbest_pos_d, self.pbest_pos).wait()   # write to device new pbest_pos
+            cl.enqueue_copy(openCLEnv.queue, self.pbest_pos_d, self.pbest_pos).wait()   # write to device new pbest_pos for next searchGrid
             openCLEnv.queue.finish()    # <------- sychrnozation
             
             # 4. update gbest        
@@ -172,7 +172,7 @@ class PSO_OpenCL(PSOBase):
             if self.pbest_costs[gid] > self.gbest_cost:  # compare with global best
                 self.gbest_cost = self.pbest_costs[gid]
                 self.gbest_pos = self.pbest_pos[:,gid].copy() #.reshape(self.nDim, 1)   # (nDim, 1) reshape to col vector
-                cl.enqueue_copy(openCLEnv.queue, self.gbest_pos_d, self.gbest_pos).wait()   # write to device new gbest_pos
+                cl.enqueue_copy(openCLEnv.queue, self.gbest_pos_d, self.gbest_pos).wait()   # write to device new gbest_pos for next searchGrid
                 openCLEnv.queue.finish()    # <------- sychrnozation
     
             # 5. record global best cost for current iteration

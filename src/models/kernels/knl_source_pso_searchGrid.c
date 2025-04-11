@@ -1,9 +1,17 @@
 #define n_Dim %d
 
 /* update nParticle positions & velocity, each thread handles on particle */
-__kernel void searchGrid(global float *position, global float *velocity, 
-                        global float *pbest_pos, global float *gbest_pos,
-                        global float *r1, global float *r2, float w, float c1, float c2){
+__kernel void searchGrid(
+    __global float *position, 
+    __global float *velocity, 
+    __global const float *pbest_pos, 
+    __global const float *gbest_pos,
+    __global const float *r1, 
+    __global const float *r2, 
+    const float w, 
+    const float c1, 
+    const float c2
+){
                         
     int gid = get_global_id(0);              // thread id presenting one particle per work-item
     int fish_size = get_global_size(0);      // number of threads/particles
