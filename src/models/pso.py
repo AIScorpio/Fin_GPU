@@ -129,7 +129,8 @@ class PSO_OpenCL(PSOBase):
         self.BestCosts = np.array([])
 
         # prepare kernels
-        prog = cl.Program(openCLEnv.context, open("./models/kernels/knl_source_pso_searchGrid.c").read()%(self.nDim)).build()
+        build_options = ["-cl-fast-relaxed-math", "-cl-mad-enable", "-cl-no-signed-zeros"]
+        prog = cl.Program(openCLEnv.context, open("./models/kernels/knl_source_pso_searchGrid.c").read()%(self.nDim)).build(options=build_options)
         self.knl_searchGrid = cl.Kernel(prog, 'searchGrid')
 
      # use GPU to update moves

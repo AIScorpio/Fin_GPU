@@ -311,9 +311,10 @@ class LSMC_OpenCL(LongStaffBase):
 
         # Build kernel with optimization flags
         kernel_src = open(f"./models/kernels/knl_src_pre_calc_optimized.c").read()
-        build_options = ["-cl-fast-relaxed-math", "-cl-mad-enable", f"-Dn_PATH={self.mc.nPath}", f"-Dn_PERIOD={self.mc.nPeriod}"]
-        # prog = cl.Program(openCLEnv.context, kernel_src %(self.mc.nPath, self.mc.nPeriod)).build(options=build_options)
-        prog = cl.Program(openCLEnv.context, kernel_src ).build(options=build_options)
+        # build_options = ["-cl-fast-relaxed-math", "-cl-mad-enable", f"-Dn_PATH={self.mc.nPath}", f"-Dn_PERIOD={self.mc.nPeriod}"]
+        build_options = ["-cl-fast-relaxed-math", "-cl-mad-enable", "-cl-no-signed-zeros"]
+        prog = cl.Program(openCLEnv.context, kernel_src %(self.mc.nPath, self.mc.nPeriod)).build(options=build_options)
+        # prog = cl.Program(openCLEnv.context, kernel_src ).build(options=build_options)
         
         knl_preCalcAll = cl.Kernel(prog, 'preCalcAll_Optimized')
         knl_preCalcAll.set_args(St_dev, np.float32(self.mc.K), np.int8(self.mc.opt), 

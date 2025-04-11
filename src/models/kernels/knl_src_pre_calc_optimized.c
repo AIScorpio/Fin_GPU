@@ -1,3 +1,6 @@
+#define n_PATH %d
+#define n_PERIOD %d
+
 #ifndef STRIDE
 #define STRIDE 3
 #endif
