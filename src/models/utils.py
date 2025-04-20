@@ -46,6 +46,7 @@ def checkOpenCL():
         .format(device.max_mem_alloc_size/ 2**30))
         print(' Device - Max Work Group Size: {0:.0f}'\
         .format(device.max_work_group_size))
+        print(' Device - Float Atomics Supported:', 'cl_khr_global_int32_base_atomics' in device.extensions)
         print('\n') 
 
 
