@@ -170,7 +170,7 @@ class LSMC_Numpy(LongStaffBase):
 
     # lease-square to calc continuation value as approaximation of "actual discounted cashflow" 
     def longstaff_schwartz_itm_path_fast(self):
-        start = time.time()
+        start = time.perf_counter()
         # setup computing components
         dt = self.mc.T / self.mc.nPeriod
         df = np.exp(- self.mc.r * dt)
@@ -231,9 +231,9 @@ class LSMC_Numpy(LongStaffBase):
         # discount cashflow to time zero for option pricing
         C_hat = np.sum(dc_cashflow) * df / self.mc.nPath
 
-        elapse = (time.time() - start) * 1e3
+        elapse = (time.perf_counter() - start) * 1e3
         print(f'Longstaff numpy price: {C_hat} - {elapse} ms')
-        return C_hat, np.array(coef_t), np.array(dc_cashflow_t)
+        return C_hat, elapse, #np.array(coef_t), np.array(dc_cashflow_t)
 
 class LSMC_OpenCL(LongStaffBase):
     def __init__(self, mc: MonteCarloBase, preCalc=None, inverseType='GJ', toggleCV='OFF', log=None):
@@ -344,7 +344,7 @@ class LSMC_OpenCL(LongStaffBase):
         return Xdagger_big, X_big_T
 
     def longstaff_schwartz_itm_path_fast_hybrid(self):
-        start = time.time()
+        start = time.perf_counter()
         # track discounted cashflow per time step
         dc_cashflow_t = []
         coef_t = []
@@ -416,9 +416,9 @@ class LSMC_OpenCL(LongStaffBase):
         # discount cashflow to time zero for option pricing
         C_hat = np.sum(dc_cashflow) * df / self.mc.nPath
 
-        elapse = (time.time() - start) * 1e3
+        elapse = (time.perf_counter() - start) * 1e3
         print(f'Longstaff {openCLEnv.deviceName} price: {C_hat} - {elapse} ms')
-        return C_hat, np.array(coef_t), np.array(dc_cashflow_t)
+        return C_hat, elapse, # np.array(coef_t), np.array(dc_cashflow_t)
 
 
 def main():

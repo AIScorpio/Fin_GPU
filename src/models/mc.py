@@ -117,28 +117,24 @@ class hybridMonteCarlo(MonteCarloBase):
         # initialize parameters
         self.nFish = nFish
         
-        # prepare kernel, buffer
-        try:
-            prog_AmerOpt = cl.Program(openCLEnv.context, open("./models/kernels/knl_source_mc_getAmerOption.c").read()%(nPath, nPeriod)).build()
-        except cl.BuildProgramFailure as e:
-            print("OpenCL Compilation Error:\n", e.program.get_build_info(openCLEnv.device, cl.program_build_info.LOG))
-            raise
-        self.knl_psoAmerOption_gb = cl.Kernel(prog_AmerOpt, 'psoAmerOption_gb')
+        # # prepare kernel, buffer
+        # try:
+        #     prog_AmerOpt = cl.Program(openCLEnv.context, open("./models/kernels/knl_source_mc_getAmerOption.c").read()%(nPath, nPeriod)).build()
+        # except cl.BuildProgramFailure as e:
+        #     print("OpenCL Compilation Error:\n", e.program.get_build_info(openCLEnv.device, cl.program_build_info.LOG))
+        #     raise
+        # self.knl_psoAmerOption_gb = cl.Kernel(prog_AmerOpt, 'psoAmerOption_gb')
         
         # init buffer for Z and St for Pso 
         self.Z_d = cl.Buffer(openCLEnv.context, cl.mem_flags.READ_ONLY | cl.mem_flags.COPY_HOST_PTR, hostbuf=self.Z)
-        self.St_d = cl.Buffer(openCLEnv.context, cl.mem_flags.READ_ONLY | cl.mem_flags.COPY_HOST_PTR, hostbuf=self.St)
-
-        # ## transpose St for float4 vectorization
-        # St_transposed = np.ascontiguousarray(self.St.T)
-        # self.St_d = cl.Buffer(openCLEnv.context, cl.mem_flags.READ_ONLY | cl.mem_flags.COPY_HOST_PTR, hostbuf=St_transposed)
+        # self.St_d = cl.Buffer(openCLEnv.context, cl.mem_flags.READ_ONLY | cl.mem_flags.COPY_HOST_PTR, hostbuf=self.St)
         
-        # array and memory objects for Pso fitFunction costPsoAmerOption_cl()
-        # init boundary index to maturity and exercise to last period St, as track early exercise backwards in time 
-        self.boundary_idx = np.empty(shape=(self.nPath, self.nFish), dtype=np.int32) #+ nPeriod
-        self.exercise = np.empty(shape=(self.nPath, self.nFish), dtype=np.float32) #+ self.St[:, -1].reshape(nPath, 1)
-        self.boundary_idx_d = cl.Buffer(openCLEnv.context, cl.mem_flags.READ_WRITE | cl.mem_flags.COPY_HOST_PTR, hostbuf=self.boundary_idx)
-        self.exercise_d = cl.Buffer(openCLEnv.context, cl.mem_flags.READ_WRITE | cl.mem_flags.COPY_HOST_PTR, hostbuf=self.exercise)
+        # # array and memory objects for Pso fitFunction costPsoAmerOption_cl()
+        # # init boundary index to maturity and exercise to last period St, as track early exercise backwards in time 
+        # self.boundary_idx = np.empty(shape=(self.nPath, self.nFish), dtype=np.int32) #+ nPeriod
+        # self.exercise = np.empty(shape=(self.nPath, self.nFish), dtype=np.float32) #+ self.St[:, -1].reshape(nPath, 1)
+        # self.boundary_idx_d = cl.Buffer(openCLEnv.context, cl.mem_flags.READ_WRITE | cl.mem_flags.COPY_HOST_PTR, hostbuf=self.boundary_idx)
+        # self.exercise_d = cl.Buffer(openCLEnv.context, cl.mem_flags.READ_WRITE | cl.mem_flags.COPY_HOST_PTR, hostbuf=self.exercise)
 
         # # Initialize shared arrays for Pso child classes
         nDim = self.nPeriod
@@ -152,13 +148,13 @@ class hybridMonteCarlo(MonteCarloBase):
     
     # Monte Carlo European option - CPU
     def getEuroOption_np(self):
-        start = time.time()  
+        start = time.perf_counter()
         assert (self.St.shape[0] == (np.exp(-self.r*self.T) * np.maximum(0, (self.K - self.St[:, -1]) * self.opt) ).shape[0])
         C_hat_Euro = (np.exp(-self.r*self.T) * np.maximum(0, (self.K - self.St[:, -1]) * self.opt) ).sum() / self.nPath
     
-        elapse = (time.time() - start) * 1e3
+        elapse = (time.perf_counter() - start) * 1e3
         print(f"MonteCarlo Numpy European price: {C_hat_Euro} - {elapse} ms")
-        return C_hat_Euro
+        return C_hat_Euro, elapse
 
     # Monte Carlo European option - GPU
     def getEuroOption_cl(self):        
@@ -167,10 +163,8 @@ class hybridMonteCarlo(MonteCarloBase):
             DeprecationWarning,
             stacklevel=2
         )
-        start = time.time()    
-        build_options = ["-cl-fast-relaxed-math", "-cl-mad-enable", "-cl-no-signed-zeros"]
-        prog_EuroOpt = cl.Program(openCLEnv.context, open("./models/kernels/knl_source_mc_getEuroOption.c").read()%(self.nPath, self.nPeriod)).build(options=build_options)
-
+        start = time.perf_counter()  
+        prog_EuroOpt = cl.Program(openCLEnv.context, open("./models/kernels/knl_source_mc_getEuroOption.c").read()%(self.nPath, self.nPeriod)).build()
         knl_getEuroOption = cl.Kernel(prog_EuroOpt, 'getEuroOption')
 
         # prepare result array, length of nPath for kernel threads
@@ -191,14 +185,16 @@ class hybridMonteCarlo(MonteCarloBase):
         
         C_hat_Euro = payoffs.sum() / self.nPath
         
-        elapse = (time.time() - start) * 1e3
+        elapse = (time.perf_counter() - start) * 1e3
         print(f"MonteCarlo {openCLEnv.deviceName} European price: {C_hat_Euro} - {elapse} ms")
         return C_hat_Euro
 
     def getEuroOption_cl_optimized(self):      
-        start = time.time()          
+        start = time.perf_counter()        
+        kernel_src = open("./models/kernels/knl_source_mc_getEuroOption.c").read()
         build_options = ["-cl-fast-relaxed-math", "-cl-mad-enable", "-cl-no-signed-zeros"]
-        prog_EuroOpt = cl.Program(openCLEnv.context, open("./models/kernels/knl_source_mc_getEuroOption.c").read()%(self.nPath, self.nPeriod)).build(options=build_options)
+        # prog_EuroOpt = cl.Program(openCLEnv.context, open("./models/kernels/knl_source_mc_getEuroOption.c").read()%(self.nPath, self.nPeriod)).build()
+        prog_EuroOpt = cl.Program(openCLEnv.context, kernel_src %(self.nPath, self.nPeriod)).build(options=build_options)
         knl_getEuroOption = cl.Kernel(prog_EuroOpt, 'getEuroOption_optimized')
 
         # prepare result array, length of nPath for kernel threads
@@ -221,9 +217,9 @@ class hybridMonteCarlo(MonteCarloBase):
         
         C_hat_Euro = payoffs.sum() / self.nPath
         
-        elapse = (time.time() - start) * 1e3
+        elapse = (time.perf_counter() - start) * 1e3
         print(f"MonteCarlo {openCLEnv.deviceName} European price: {C_hat_Euro} - {elapse} ms")
-        return C_hat_Euro
+        return C_hat_Euro, elapse
 
     def getEuroOption_cl_optimize_reductionSum(self):    
         CEILING = 65536
@@ -233,9 +229,8 @@ class hybridMonteCarlo(MonteCarloBase):
                 UserWarning,
                 stacklevel=2
             )   
-        start = time.time()          
-        build_options = ["-cl-fast-relaxed-math", "-cl-mad-enable", "-cl-no-signed-zeros"]
-        prog_EuroOpt = cl.Program(openCLEnv.context, open("./models/kernels/knl_source_mc_getEuroOption.c").read()%(self.nPath, self.nPeriod)).build(options=build_options)
+        start = time.perf_counter()        
+        prog_EuroOpt = cl.Program(openCLEnv.context, open("./models/kernels/knl_source_mc_getEuroOption.c").read()%(self.nPath, self.nPeriod)).build()
         knl_getEuroOption_sum1 = cl.Kernel(prog_EuroOpt, 'getEuroOption_optimized_sum1')
         knl_getEuroOption_sum2 = cl.Kernel(prog_EuroOpt, 'getEuroOption_optimized_sum2')
 
@@ -290,50 +285,51 @@ class hybridMonteCarlo(MonteCarloBase):
         # C_hat_Euro = C_hats.sum() / self.nPath      # if only first reduction
         C_hat_Euro = final_result.sum() / self.nPath
 
-        elapse = (time.time() - start) * 1e3
+        elapse = (time.perf_counter()- start) * 1e3
         print(f"MonteCarlo {openCLEnv.deviceName}-reductionSum European price: {C_hat_Euro} - {elapse} ms")
         return C_hat_Euro
 
-    # Monte Carlo pso American option - CPU: take one particle each time and loop thru PSO
-    def costPsoAmerOption_np(self, in_particle):
-        # # udpated on 6 Apr. 2025 
-        # 1. for unified Z, St shape as nPath by nPeriod, synced and shared by PSO and Longstaff
-        # 2. No concatenation of spot price
-        # 3. handle index of time period, spot price at time zero (present), St from time 1 to T
+    # # Monte Carlo pso American option - CPU: take one particle each time and loop thru PSO
+    # def costPsoAmerOption_np(self, in_particle):
+    #     # # udpated on 6 Apr. 2025 
+    #     # 1. for unified Z, St shape as nPath by nPeriod, synced and shared by PSO and Longstaff
+    #     # 2. No concatenation of spot price
+    #     # 3. handle index of time period, spot price at time zero (present), St from time 1 to T
 
-        # get the boundary index where early cross (particle period > St period), as if an early exercise judgement by this fish/particle
-        boundaryIdx = np.argmax(self.St < in_particle[None, :], axis=1)   # [0, 1] as of true or false of early cross
-        # if no, set boundary index to last time period, meaning no early exercise suggested for that path
-        boundaryIdx[boundaryIdx==0] = self.nPeriod - 1    # to handle time T index for boundary index to match St time wise dimension (i.e. indexing from zero)
+    #     # get the boundary index where early cross (particle period > St period), as if an early exercise judgement by this fish/particle
+    #     boundaryIdx = np.argmax(self.St < in_particle[None, :], axis=1)   # [0, 1] as of true or false of early cross
+
+    #     # if no, set boundary index to last time period, meaning no early exercise suggested for that path
+    #     boundaryIdx[boundaryIdx==0] = self.nPeriod - 1    # to handle time T index for boundary index to match St time wise dimension (i.e. indexing from zero)
         
-        # determine exercise prices by getting the early cross St_ij on path i and period j
-        exerciseSt = self.St[np.arange(len(boundaryIdx)), boundaryIdx]    # len of boundaryIdx is nPath
+    #     # determine exercise prices by getting the early cross St_ij on path i and period j
+    #     exerciseSt = self.St[np.arange(len(boundaryIdx)), boundaryIdx]    # len of boundaryIdx is nPath
         
-        # discounted back to time zero, hence boundaryIdx+1
-        searchCost = (np.exp(-self.r * (boundaryIdx+1) * self.dt) * np.maximum(0, (self.K - exerciseSt)*self.opt) ).sum() / self.nPath
+    #     # discounted back to time zero, hence boundaryIdx+1
+    #     searchCost = (np.exp(-self.r * (boundaryIdx+1) * self.dt) * np.maximum(0, (self.K - exerciseSt)*self.opt) ).sum() / self.nPath
 
-        return searchCost
+    #     return searchCost
 
-    # Monte Carlo pso American option - GPU: take the whole PSO and process once
-    def costPsoAmerOption_cl(self, pso_buffer, costs_buffer):
+    # # Monte Carlo pso American option - GPU: take the whole PSO and process once
+    # def costPsoAmerOption_cl(self, pso_buffer, costs_buffer):
         
-        self.knl_psoAmerOption_gb.set_args(self.St_d, pso_buffer, costs_buffer, 
-                                           self.boundary_idx_d, self.exercise_d, 
-                                           np.float32(self.r), np.float32(self.T), np.float32(self.K), np.int8(self.opt))
+    #     self.knl_psoAmerOption_gb.set_args(self.St_d, pso_buffer, costs_buffer, 
+    #                                        self.boundary_idx_d, self.exercise_d, 
+    #                                        np.float32(self.r), np.float32(self.T), np.float32(self.K), np.int8(self.opt))
 
-        # execute kernel
-        global_size = (self.nFish, )
-        local_size = None
-        cl.enqueue_nd_range_kernel(openCLEnv.queue, self.knl_psoAmerOption_gb, global_size, local_size).wait()
-        openCLEnv.queue.finish()    # <------- sychrnozation
+    #     # execute kernel
+    #     global_size = (self.nFish, )
+    #     local_size = None
+    #     cl.enqueue_nd_range_kernel(openCLEnv.queue, self.knl_psoAmerOption_gb, global_size, local_size).wait()
+    #     openCLEnv.queue.finish()    # <------- sychrnozation
 
-        return 
+    #     return 
 
     def cleanUp(self):
         self.Z_d.release()
-        self.St_d.release()
-        self.boundary_idx_d.release()
-        self.exercise_d.release()
+        # self.St_d.release()
+        # self.boundary_idx_d.release()
+        # self.exercise_d.release()
         return 
 
 
