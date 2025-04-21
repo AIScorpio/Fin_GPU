@@ -1,9 +1,9 @@
 #define n_PATH %d
 #define n_PERIOD %d
 
-// 编译时通过-DVEC_SIZE=4传入向量宽度
+// 编译时通过-DVEC_SIZE=4传入向量宽度, 默认float4
 #ifndef VEC_SIZE
-#define VEC_SIZE 4  // 默认float4
+#define VEC_SIZE 16
 #endif
 
 // 动态定义向量类型和转换函数
@@ -232,7 +232,7 @@ __kernel void psoAmerOption_gb3_vec(
 
     // 每个线程处理VEC_SIZE个路径
     for (int vec_path=0; vec_path<n_VecPath; vec_path++){
-        int_vec bound_idx = (int4)(n_PERIOD - 1);            // init to last period
+        int_vec bound_idx = (int_vec)(n_PERIOD - 1);            // init to last period
         int St_T_idx = (n_PERIOD-1) * n_VecPath + vec_path;
         float_vec early_excise = St[St_T_idx];               // init to St path_i last period price
 
