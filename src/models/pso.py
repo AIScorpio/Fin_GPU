@@ -169,7 +169,8 @@ class PSO_OpenCL_hybrid(PSOBase):
         self.knl_searchGrid = cl.Kernel(prog, 'searchGrid')
         # fitness function
         prog_AmerOpt = cl.Program(openCLEnv.context, open("./models/kernels/knl_source_mc_getAmerOption.c").read()%(self.mc.nPath, self.mc.nPeriod)).build()
-        self.knl_psoAmerOption_gb = cl.Kernel(prog_AmerOpt, 'psoAmerOption_gb2')
+        self.knl_psoAmerOption_gb = cl.Kernel(prog_AmerOpt, 'psoAmerOption_gb')
+        # self.knl_psoAmerOption_gb = cl.Kernel(prog_AmerOpt, 'psoAmerOption_gb2')
     
     # use GPU to update moves
     def _searchGrid(self):
@@ -426,13 +427,13 @@ class PSO_OpenCL_scalar(PSOBase):
 #################################
 
 class PSO_OpenCL_vec(PSOBase):
-    def __init__(self, mc: MonteCarloBase, nFish, iterMax=30):
+    def __init__(self, mc: MonteCarloBase, nFish, vec_size=4, iterMax=30):
         super().__init__(mc, nFish)
         self.iterMax = iterMax
         # self.fitFunc = fitFunc
 
         # set SIMD vectorization parameters
-        self.vec_size = 16
+        self.vec_size = vec_size
         try:
             # assert (self.nDim % self.vec_size) == 0
             assert (self.mc.nPath % self.vec_size) == 0
@@ -484,7 +485,8 @@ class PSO_OpenCL_vec(PSOBase):
         prog_sg = cl.Program(openCLEnv.context, open("./models/kernels/knl_source_pso_searchGrid.c").read()%(self.nDim)).build()
         self.knl_searchGrid = cl.Kernel(prog_sg, 'searchGrid')
         # fitness function
-        prog_AmerOpt = cl.Program(openCLEnv.context, open("./models/kernels/knl_source_mc_getAmerOption.c").read()%(self.mc.nPath, self.mc.nPeriod)).build()
+        build_options = ["-cl-fast-relaxed-math", "-cl-mad-enable", "-cl-no-signed-zeros", f"-DVEC_SIZE={self.vec_size}"]
+        prog_AmerOpt = cl.Program(openCLEnv.context, open("./models/kernels/knl_source_mc_getAmerOption.c").read()%(self.mc.nPath, self.mc.nPeriod)).build(options=build_options)
         self.knl_psoAmerOption_gb = cl.Kernel(prog_AmerOpt, 'psoAmerOption_gb3_vec')
         # update bests
         prog_ub = cl.Program(openCLEnv.context, open("./models/kernels/knl_source_pso_updateBests.c").read()%(self.nDim, self.nFish)).build()

@@ -3,7 +3,7 @@
 
 // 编译时通过-DVEC_SIZE=4传入向量宽度, 默认float4
 #ifndef VEC_SIZE
-#define VEC_SIZE 16
+#define VEC_SIZE 4
 #endif
 
 // 动态定义向量类型和转换函数
