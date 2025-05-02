@@ -168,7 +168,7 @@ class PSO_OpenCL_hybrid(PSOBase):
         prog = cl.Program(openCLEnv.context, open("./models/kernels/knl_source_pso_searchGrid.c").read()%(self.nDim)).build()
         self.knl_searchGrid = cl.Kernel(prog, 'searchGrid')
         # fitness function
-        prog_AmerOpt = cl.Program(openCLEnv.context, open("./models/kernels/knl_source_mc_getAmerOption.c").read()%(self.mc.nPath, self.mc.nPeriod)).build()
+        prog_AmerOpt = cl.Program(openCLEnv.context, open("./models/kernels/knl_source_pso_getAmerOption.c").read()%(self.mc.nPath, self.mc.nPeriod)).build()
         self.knl_psoAmerOption_gb = cl.Kernel(prog_AmerOpt, 'psoAmerOption_gb')
         # self.knl_psoAmerOption_gb = cl.Kernel(prog_AmerOpt, 'psoAmerOption_gb2')
     
@@ -321,7 +321,7 @@ class PSO_OpenCL_scalar(PSOBase):
         prog_sg = cl.Program(openCLEnv.context, open("./models/kernels/knl_source_pso_searchGrid.c").read()%(self.nDim)).build()
         self.knl_searchGrid = cl.Kernel(prog_sg, 'searchGrid')
         # fitness function
-        prog_AmerOpt = cl.Program(openCLEnv.context, open("./models/kernels/knl_source_mc_getAmerOption.c").read()%(self.mc.nPath, self.mc.nPeriod)).build()
+        prog_AmerOpt = cl.Program(openCLEnv.context, open("./models/kernels/knl_source_pso_getAmerOption.c").read()%(self.mc.nPath, self.mc.nPeriod)).build()
         self.knl_psoAmerOption_gb = cl.Kernel(prog_AmerOpt, 'psoAmerOption_gb3')
         # update bests
         prog_ub = cl.Program(openCLEnv.context, open("./models/kernels/knl_source_pso_updateBests.c").read()%(self.nDim, self.nFish)).build()
@@ -486,7 +486,7 @@ class PSO_OpenCL_vec(PSOBase):
         self.knl_searchGrid = cl.Kernel(prog_sg, 'searchGrid')
         # fitness function
         build_options = ["-cl-fast-relaxed-math", "-cl-mad-enable", "-cl-no-signed-zeros", f"-DVEC_SIZE={self.vec_size}"]
-        prog_AmerOpt = cl.Program(openCLEnv.context, open("./models/kernels/knl_source_mc_getAmerOption.c").read()%(self.mc.nPath, self.mc.nPeriod)).build(options=build_options)
+        prog_AmerOpt = cl.Program(openCLEnv.context, open("./models/kernels/knl_source_pso_getAmerOption.c").read()%(self.mc.nPath, self.mc.nPeriod)).build(options=build_options)
         self.knl_psoAmerOption_gb = cl.Kernel(prog_AmerOpt, 'psoAmerOption_gb3_vec')
         # update bests
         prog_ub = cl.Program(openCLEnv.context, open("./models/kernels/knl_source_pso_updateBests.c").read()%(self.nDim, self.nFish)).build()
@@ -642,7 +642,7 @@ class PSO_OpenCL_scalar_oneKnl(PSOBase):
 
         # prepare kernels
         # searchGrid, fitness function, update pbest
-        prog = cl.Program(openCLEnv.context, open("./models/kernels/knl_source_pso.c").read()%(self.nDim, self.mc.nPath, self.mc.nPeriod, self.nFish)).build()
+        prog = cl.Program(openCLEnv.context, open("./models/kernels/knl_source_pso_oneKernel.c").read()%(self.nDim, self.mc.nPath, self.mc.nPeriod, self.nFish)).build()
         self.knl_pso = cl.Kernel(prog, 'pso')
         # update bests
         self.knl_update_gbest_pos = cl.Kernel(prog, 'update_gbest_pos')

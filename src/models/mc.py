@@ -117,31 +117,18 @@ class hybridMonteCarlo(MonteCarloBase):
         # initialize parameters
         self.nFish = nFish
         
-        # # prepare kernel, buffer
-        # try:
-        #     prog_AmerOpt = cl.Program(openCLEnv.context, open("./models/kernels/knl_source_mc_getAmerOption.c").read()%(nPath, nPeriod)).build()
-        # except cl.BuildProgramFailure as e:
-        #     print("OpenCL Compilation Error:\n", e.program.get_build_info(openCLEnv.device, cl.program_build_info.LOG))
-        #     raise
-        # self.knl_psoAmerOption_gb = cl.Kernel(prog_AmerOpt, 'psoAmerOption_gb')
-        
         # init buffer for Z and St for Pso 
         self.Z_d = cl.Buffer(openCLEnv.context, cl.mem_flags.READ_ONLY | cl.mem_flags.COPY_HOST_PTR, hostbuf=self.Z)
         # self.St_d = cl.Buffer(openCLEnv.context, cl.mem_flags.READ_ONLY | cl.mem_flags.COPY_HOST_PTR, hostbuf=self.St)
-        
-        # # array and memory objects for Pso fitFunction costPsoAmerOption_cl()
-        # # init boundary index to maturity and exercise to last period St, as track early exercise backwards in time 
-        # self.boundary_idx = np.empty(shape=(self.nPath, self.nFish), dtype=np.int32) #+ nPeriod
-        # self.exercise = np.empty(shape=(self.nPath, self.nFish), dtype=np.float32) #+ self.St[:, -1].reshape(nPath, 1)
-        # self.boundary_idx_d = cl.Buffer(openCLEnv.context, cl.mem_flags.READ_WRITE | cl.mem_flags.COPY_HOST_PTR, hostbuf=self.boundary_idx)
-        # self.exercise_d = cl.Buffer(openCLEnv.context, cl.mem_flags.READ_WRITE | cl.mem_flags.COPY_HOST_PTR, hostbuf=self.exercise)
 
         # # Initialize shared arrays for Pso child classes
         nDim = self.nPeriod
-        self.pos_init = np.random.uniform(size=(nDim, nFish)).astype(np.float32) * 100.0    #self.S0
-        self.vel_init = np.random.uniform(size=(nDim, nFish)).astype(np.float32) * 5.0      #np.abs(self.S0 - self.K)
-        self.r1 = np.random.uniform(size=(nDim, nFish)).astype(np.float32)
-        self.r2 = np.random.uniform(size=(nDim, nFish)).astype(np.float32)
+        rng = np.random.default_rng(seed=52)
+        # rng = np.random.default_rng()
+        self.pos_init = rng.uniform(size=(nDim, nFish)).astype(np.float32) * 100.0    #self.S0
+        self.vel_init = rng.uniform(size=(nDim, nFish)).astype(np.float32) * 5.0      #np.abs(self.S0 - self.K)
+        self.r1 = rng.uniform(size=(nDim, nFish)).astype(np.float32)
+        self.r2 = rng.uniform(size=(nDim, nFish)).astype(np.float32)
 
     def __str__(self):
         return str(self.__class__) + ": " + str(self.__dict__)
