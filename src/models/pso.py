@@ -170,7 +170,6 @@ class PSO_OpenCL_hybrid(PSOBase):
         # fitness function
         prog_AmerOpt = cl.Program(openCLEnv.context, open("./models/kernels/knl_source_pso_getAmerOption.c").read()%(self.mc.nPath, self.mc.nPeriod)).build()
         self.knl_psoAmerOption_gb = cl.Kernel(prog_AmerOpt, 'psoAmerOption_gb')
-        # self.knl_psoAmerOption_gb = cl.Kernel(prog_AmerOpt, 'psoAmerOption_gb2')
     
     # use GPU to update moves
     def _searchGrid(self):
@@ -276,7 +275,7 @@ class PSO_OpenCL_hybrid(PSOBase):
 #################################
 
 class PSO_OpenCL_scalar(PSOBase):
-    def __init__(self, mc: MonteCarloBase, nFish, iterMax=30):
+    def __init__(self, mc: MonteCarloBase, nFish, direction='backward', iterMax=30):
         super().__init__(mc, nFish)
         self.iterMax = iterMax
         # self.fitFunc = fitFunc
@@ -322,7 +321,10 @@ class PSO_OpenCL_scalar(PSOBase):
         self.knl_searchGrid = cl.Kernel(prog_sg, 'searchGrid')
         # fitness function
         prog_AmerOpt = cl.Program(openCLEnv.context, open("./models/kernels/knl_source_pso_getAmerOption.c").read()%(self.mc.nPath, self.mc.nPeriod)).build()
-        self.knl_psoAmerOption_gb = cl.Kernel(prog_AmerOpt, 'psoAmerOption_gb3')
+        if direction=='forward':
+            self.knl_psoAmerOption_gb = cl.Kernel(prog_AmerOpt, 'psoAmerOption_gb2')
+        elif direction=='backward':
+            self.knl_psoAmerOption_gb = cl.Kernel(prog_AmerOpt, 'psoAmerOption_gb3')
         # update bests
         prog_ub = cl.Program(openCLEnv.context, open("./models/kernels/knl_source_pso_updateBests.c").read()%(self.nDim, self.nFish)).build()
         self.knl_update_pbest = cl.Kernel(prog_ub, 'update_pbest')

@@ -125,8 +125,6 @@ __kernel void psoAmerOption_gb2(
     __global const float *St, 
     __global const float *pso,        // the updated position matrix, [nDim by nFish] 
     __global float *C_hat, 
-    __global int *boundary_idx, 
-    __global float *exercise,
     const float r, 
     const float T, 
     const float K, 
@@ -163,8 +161,6 @@ __kernel void psoAmerOption_gb2(
 
         // compute current path present value of simulated American option; then cumulate for average later
         tmp_cost += exp(-r * (bound_idx+1) * dt) * max(0.0f, (K - early_excise)*opt); 
-        // boundary_idx[path_boundary_id] = bound_idx;        //store current time step
-        // exercise[path_boundary_id] = early_excise;     //store current price
     }
     
     tmp_cost = tmp_cost / n_PATH;    // get average C_hat for current fish/thread investigation
@@ -252,11 +248,9 @@ __kernel void psoAmerOption_gb3_vec(
         // 计算当前向量路径组的期权价值
         float_vec payoffs = max((float_vec)(0.0f), (K - early_excise) * opt);
         float_vec discounts = exp(-r * (convert_float_vec(bound_idx) + 1) * dt);
-        // float4 path_values = payoffs * discounts;
         float_vec payoff_discount = payoffs * discounts;
         
         // 手动累加4个路径的值到标量tmp_cost
-        // tmp_cost += path_values.s0 + path_values.s1 + path_values.s2 + path_values.s3;
         tmp_cost += SUM_VEC(payoff_discount);
     }
     
