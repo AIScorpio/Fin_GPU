@@ -163,7 +163,6 @@ __kernel void pso_vec(
         tmp_cost += SUM_VEC(payoff_discount);
     }
 
-
     tmp_cost = tmp_cost / n_PATH;    // get average C_hat for current fish/thread investigation
 
     /* 3. update pbest */

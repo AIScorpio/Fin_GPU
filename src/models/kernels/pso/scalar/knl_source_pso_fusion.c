@@ -68,7 +68,6 @@ __kernel void pso(
     }
     
     tmp_C = tmp_C / n_PATH;    // get average C_hat for current fish/thread investigation
-    // costs[gid] = tmp_C;   
 
     /* 3. update pbest */
     if (tmp_C > pbest_costs[gid]) {
