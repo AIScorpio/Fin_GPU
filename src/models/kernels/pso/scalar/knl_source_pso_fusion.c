@@ -17,9 +17,6 @@ __kernel void pso(
     const float c2, 
     // 2. American option - fitness each fish
     __global const float *St, 
-    __global float *costs, 
-    // __global int *boundary_idx, 
-    // __global float *exercise,
     const float r, 
     const float T, 
     const float K, 
@@ -71,7 +68,7 @@ __kernel void pso(
     }
     
     tmp_C = tmp_C / n_PATH;    // get average C_hat for current fish/thread investigation
-    costs[gid] = tmp_C;   
+    // costs[gid] = tmp_C;   
 
     /* 3. update pbest */
     if (tmp_C > pbest_costs[gid]) {

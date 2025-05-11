@@ -58,7 +58,6 @@ __kernel void pso_vec(
     const float c2, 
     // 2. American option - fitness each fish
     __global const float_vec *St_vec,            // [nDim, nVecPath]    向量化后的St布局  [nPeriod, nVecPath] 
-    __global float *costs,                   // [nFish]     can compute on the fly
     const float r, 
     const float T, 
     const float K, 
@@ -166,7 +165,6 @@ __kernel void pso_vec(
 
 
     tmp_cost = tmp_cost / n_PATH;    // get average C_hat for current fish/thread investigation
-    costs[gid] = tmp_cost;
 
     /* 3. update pbest */
     if (tmp_cost > pbest_costs[gid]) {

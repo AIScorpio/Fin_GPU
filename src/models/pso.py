@@ -451,12 +451,13 @@ class PSO_OpenCL_scalar_fusion(PSOBase):
         # init fitness buffer
         self.St_d = cl.Buffer(openCLEnv.context, cl.mem_flags.READ_ONLY | cl.mem_flags.COPY_HOST_PTR, hostbuf=self.mc.St)
 
-        # init particles costs          (nFish,)
-        self.costs = np.zeros((self.nFish,), dtype=np.float32)
-        self.costs_d = cl.Buffer(openCLEnv.context, cl.mem_flags.READ_WRITE | cl.mem_flags.ALLOC_HOST_PTR, size=self.costs.nbytes)
+        ## compute on the fly on GPU - init particles costs          (nFish,)
+        # self.costs = np.zeros((self.nFish,), dtype=np.float32)
+        # self.costs_d = cl.Buffer(openCLEnv.context, cl.mem_flags.READ_WRITE | cl.mem_flags.ALLOC_HOST_PTR, size=self.costs.nbytes)
         
         # init personal best (costs & position)
-        self.pbest_costs = self.costs.copy()     # (nFish,)      
+        # self.pbest_costs = self.costs.copy()     # (nFish,)      
+        self.pbest_costs = np.zeros((self.nFish,), dtype=np.float32)
         self.pbest_costs_d = cl.Buffer(openCLEnv.context, cl.mem_flags.READ_WRITE | cl.mem_flags.ALLOC_HOST_PTR, size=self.pbest_costs.nbytes)
         self.pbest_pos = self.position.copy()    # (nDim, nFish) each particle has its persional best pos by dimension
         self.pbest_pos_d = cl.Buffer(openCLEnv.context, cl.mem_flags.READ_WRITE | cl.mem_flags.COPY_HOST_PTR, hostbuf=self.pbest_pos)  
@@ -487,7 +488,7 @@ class PSO_OpenCL_scalar_fusion(PSOBase):
             self.r1_d, self.r2_d, 
             np.float32(self._w), np.float32(self._c1), np.float32(self._c2),
             # fitness function
-            self.St_d, self.costs_d, 
+            self.St_d, #self.costs_d, 
             np.float32(self.mc.r), np.float32(self.mc.T), np.float32(self.mc.K), np.int8(self.mc.opt),
             # update pbest
             self.pbest_costs_d
@@ -498,15 +499,15 @@ class PSO_OpenCL_scalar_fusion(PSOBase):
         local_size = None
 
         cl.enqueue_nd_range_kernel(openCLEnv.queue, self.knl_pso, global_size, local_size).wait()
-        # sanity check
-        cl.enqueue_copy(openCLEnv.queue, self.position, self.pos_d).wait()   # write to host new position
-        cl.enqueue_copy(openCLEnv.queue, self.costs, self.costs_d).wait()   # write to host new costs
-        cl.enqueue_copy(openCLEnv.queue, self.pbest_costs, self.pbest_costs_d).wait()   # write to host new pbest_costs
-
-        openCLEnv.queue.finish()         
+        # # sanity check
+        # cl.enqueue_copy(openCLEnv.queue, self.position, self.pos_d).wait()   # write to host new position
+        # cl.enqueue_copy(openCLEnv.queue, self.costs, self.costs_d).wait()   # write to host new costs
+        # cl.enqueue_copy(openCLEnv.queue, self.pbest_costs, self.pbest_costs_d).wait()   # write to host new pbest_costs
         # print(f'current pos:\n {self.position}')
         # print(f'current costs:\n {self.costs}')
         # print(f'current pbest_costs:\n {self.pbest_costs}')
+
+        openCLEnv.queue.finish()         
 
         return
 
@@ -565,7 +566,7 @@ class PSO_OpenCL_scalar_fusion(PSOBase):
         self.vel_d.release()
         self.r1_d.release()
         self.r2_d.release()
-        self.costs_d.release()
+        # self.costs_d.release()
         self.pbest_costs_d.release()
         self.pbest_pos_d.release()
         self.gbest_cost_d.release()
@@ -789,12 +790,13 @@ class PSO_OpenCL_vec_fusion(PSOBase):
         self.St_vec = self.mc.St.copy().T.reshape(self.mc.nPeriod, self.nVec_nPath, self.vec_size).transpose(0, 1, 2).copy().reshape(-1, self.vec_size)
         self.St_d = cl.Buffer(openCLEnv.context, cl.mem_flags.READ_ONLY | cl.mem_flags.USE_HOST_PTR, hostbuf=self.St_vec.ravel())
 
-        # init particles costs          (nFish,)
-        self.costs = np.zeros((self.nFish,), dtype=np.float32)
-        self.costs_d = cl.Buffer(openCLEnv.context, cl.mem_flags.READ_WRITE | cl.mem_flags.ALLOC_HOST_PTR, size=self.costs.nbytes)
+        ## compute on the fly on GPU - init particles costs          (nFish,)
+        # self.costs = np.zeros((self.nFish,), dtype=np.float32)
+        # self.costs_d = cl.Buffer(openCLEnv.context, cl.mem_flags.READ_WRITE | cl.mem_flags.ALLOC_HOST_PTR, size=self.costs.nbytes)
         
         # init personal best (costs & position)
-        self.pbest_costs = self.costs.copy()     # (nFish,)      
+        # self.pbest_costs = self.costs.copy()     # (nFish,)      
+        self.pbest_costs = np.zeros((self.nFish,), dtype=np.float32)   
         self.pbest_costs_d = cl.Buffer(openCLEnv.context, cl.mem_flags.READ_WRITE | cl.mem_flags.ALLOC_HOST_PTR, size=self.pbest_costs.nbytes)
         self.pbest_pos = self.position.copy()    # (nDim, nFish) each particle has its persional best pos by dimension
         self.pbest_pos_d = cl.Buffer(openCLEnv.context, cl.mem_flags.READ_WRITE | cl.mem_flags.COPY_HOST_PTR, hostbuf=self.pbest_pos)  
@@ -832,7 +834,7 @@ class PSO_OpenCL_vec_fusion(PSOBase):
             self.r1_d, self.r2_d, 
             np.float32(self._w), np.float32(self._c1), np.float32(self._c2),
             # fitness function
-            self.St_d, self.costs_d, 
+            self.St_d, #self.costs_d, 
             np.float32(self.mc.r), np.float32(self.mc.T), np.float32(self.mc.K), np.int8(self.mc.opt),
             # update pbest
             self.pbest_costs_d
@@ -843,15 +845,15 @@ class PSO_OpenCL_vec_fusion(PSOBase):
         local_size = None
 
         cl.enqueue_nd_range_kernel(openCLEnv.queue, self.knl_pso, global_size, local_size).wait()
-        # sanity check
-        cl.enqueue_copy(openCLEnv.queue, self.position, self.pos_d).wait()   # write to host new position
-        cl.enqueue_copy(openCLEnv.queue, self.costs, self.costs_d).wait()   # write to host new costs
-        cl.enqueue_copy(openCLEnv.queue, self.pbest_costs, self.pbest_costs_d).wait()   # write to host new pbest_costs
-
-        openCLEnv.queue.finish()         
+        # # sanity check
+        # cl.enqueue_copy(openCLEnv.queue, self.position, self.pos_d).wait()   # write to host new position
+        # cl.enqueue_copy(openCLEnv.queue, self.costs, self.costs_d).wait()   # write to host new costs
+        # cl.enqueue_copy(openCLEnv.queue, self.pbest_costs, self.pbest_costs_d).wait()   # write to host new pbest_costs
         # print(f'current pos:\n {self.position}')
         # print(f'current costs:\n {self.costs}')
         # print(f'current pbest_costs:\n {self.pbest_costs}')
+
+        openCLEnv.queue.finish()         
 
         return
 
@@ -910,7 +912,7 @@ class PSO_OpenCL_vec_fusion(PSOBase):
         self.vel_d.release()
         self.r1_d.release()
         self.r2_d.release()
-        self.costs_d.release()
+        # self.costs_d.release()
         self.pbest_costs_d.release()
         self.pbest_pos_d.release()
         self.gbest_cost_d.release()
