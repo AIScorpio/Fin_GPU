@@ -151,7 +151,7 @@ class hybridMonteCarlo(MonteCarloBase):
             stacklevel=2
         )
         start = time.perf_counter()  
-        prog_EuroOpt = cl.Program(openCLEnv.context, open("./models/kernels/knl_source_mc_getEuroOption.c").read()%(self.nPath, self.nPeriod)).build()
+        prog_EuroOpt = cl.Program(openCLEnv.context, open("./models/kernels/mc/knl_source_mc_getEuroOption.c").read()%(self.nPath, self.nPeriod)).build()
         knl_getEuroOption = cl.Kernel(prog_EuroOpt, 'getEuroOption')
 
         # prepare result array, length of nPath for kernel threads
@@ -178,7 +178,7 @@ class hybridMonteCarlo(MonteCarloBase):
 
     def getEuroOption_cl_optimized(self):      
         start = time.perf_counter()        
-        kernel_src = open("./models/kernels/knl_source_mc_getEuroOption.c").read()
+        kernel_src = open("./models/kernels/mc/knl_source_mc_getEuroOption.c").read()
         build_options = ["-cl-fast-relaxed-math", "-cl-mad-enable", "-cl-no-signed-zeros"]
         # prog_EuroOpt = cl.Program(openCLEnv.context, open("./models/kernels/knl_source_mc_getEuroOption.c").read()%(self.nPath, self.nPeriod)).build()
         prog_EuroOpt = cl.Program(openCLEnv.context, kernel_src %(self.nPath, self.nPeriod)).build(options=build_options)
@@ -217,7 +217,7 @@ class hybridMonteCarlo(MonteCarloBase):
                 stacklevel=2
             )   
         start = time.perf_counter()        
-        prog_EuroOpt = cl.Program(openCLEnv.context, open("./models/kernels/knl_source_mc_getEuroOption.c").read()%(self.nPath, self.nPeriod)).build()
+        prog_EuroOpt = cl.Program(openCLEnv.context, open("./models/kernels/mc/knl_source_mc_getEuroOption.c").read()%(self.nPath, self.nPeriod)).build()
         knl_getEuroOption_sum1 = cl.Kernel(prog_EuroOpt, 'getEuroOption_optimized_sum1')
         knl_getEuroOption_sum2 = cl.Kernel(prog_EuroOpt, 'getEuroOption_optimized_sum2')
 

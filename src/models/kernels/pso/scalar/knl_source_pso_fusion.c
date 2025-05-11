@@ -8,7 +8,7 @@ __kernel void pso(
     // 1. searchGrid
     __global float *position,                // [nDim, nFish]
     __global float *velocity,                // [nDim, nFish]
-    __global float *pbest_pos,         // [nDim, nFish]
+    __global float *pbest_pos,               // [nDim, nFish]
     __global const float *gbest_pos,         // [nDim]
     __global const float *r1,                // [nDim, nFish]
     __global const float *r2,                // [nDim, nFish]
@@ -18,8 +18,8 @@ __kernel void pso(
     // 2. American option - fitness each fish
     __global const float *St, 
     __global float *costs, 
-    __global int *boundary_idx, 
-    __global float *exercise,
+    // __global int *boundary_idx, 
+    // __global float *exercise,
     const float r, 
     const float T, 
     const float K, 
@@ -27,7 +27,7 @@ __kernel void pso(
     // 3. update pbest
     __global float *pbest_costs
 ){
-    int gid = get_global_id(0);          // index of the fish
+    int gid = get_global_id(0);              // index of the fish
     int nParticle = get_global_size(0);      // nFish
 
     /* 1. searchGrid */
